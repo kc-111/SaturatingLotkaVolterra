@@ -1,0 +1,10 @@
+.venv
+src/__pycache__/
+src/logs/
+src/MSim.egg-info/
+logs/
+__pycache__/
+tests_examples/microbe_model_test.py
+*.npz
+*.egg-info/
+.vscode/

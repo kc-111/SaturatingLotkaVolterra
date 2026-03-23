@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "SaturatingLotkaVolterra"
+version = "0.1.0"
+description = "A saturating Lotka-Volterra model simulation package."
+authors = [
+  { name = "Pak Lun Kevin Cheung", email = "pcheung4@wisc.edu" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "notebook",
+    "imageio",
+    "scipy==1.15.0",
+    "pandas==2.3.2",
+    "matplotlib==3.10.6",
+    "scikit-learn==1.7.1",
+    "seaborn==0.13.2",
+    "jupyterlab==4.3.3",
+    "tqdm==4.66.4",
+    "pillow==10.4.0",
+    "h5py==3.12.1",
+    "safetensors>=0.4",
+    "torch==2.8.0",
+    "torchvision==0.23.0",
+    "torchaudio==2.8.0",
+]
+
+[project.optional-dependencies]
+cpu = []
+
+# Install with: pip install -e .[gpu] --extra-index-url https://download.pytorch.org/whl/cu126
+gpu = [
+  "triton==3.4.0 ; sys_platform == 'linux'",
+  "triton-windows<3.5 ; sys_platform == 'win32'",
+]
