@@ -1,4 +1,5 @@
 import torch
+from safetensors.torch import save_file, load_file
 from .ode_solver import Tsit5SolverTorch
 
 class SLV:
@@ -81,6 +82,37 @@ class SLV:
         ints = x[:, None, :] + self.K1[None, :, :] + x[:, None, :]**2 / self.K2[None, :, :]
         ints = self.A[None, :, :] * 1.0 / ints
         return x * (torch.einsum("ijk,ik->ij", ints, x) + self.mu - self.A_diag[None, :] * x)
+
+    def save(self, path: str) -> None:
+        """Save model parameters to a safetensors file."""
+        tensors = {
+            "mu": self.mu,
+            "A_diag": self.A_diag,
+            "A": self.A,
+            "K1": self.K1,
+            "K2": self.K2,
+            "interaction_mask": self.interaction_mask,
+        }
+        metadata = {"n_species": str(self.n_species)}
+        save_file(tensors, path, metadata=metadata)
+
+    @classmethod
+    def load(cls, path: str, device: torch.device = torch.device("cpu")) -> "SLV":
+        """Load model parameters from a safetensors file."""
+        tensors = load_file(path, device=str(device))
+        # Read metadata to get n_species
+        from safetensors import safe_open
+        with safe_open(path, framework="pt") as f:
+            metadata = f.metadata()
+        obj = object.__new__(cls)
+        obj.n_species = int(metadata["n_species"])
+        obj.mu = tensors["mu"]
+        obj.A_diag = tensors["A_diag"]
+        obj.A = tensors["A"]
+        obj.K1 = tensors["K1"]
+        obj.K2 = tensors["K2"]
+        obj.interaction_mask = tensors["interaction_mask"]
+        return obj
 
     def solve(self, x0: torch.Tensor, t_span: tuple[float, float], t_eval: torch.Tensor) -> torch.Tensor:
         """

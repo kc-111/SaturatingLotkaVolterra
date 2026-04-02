@@ -35,6 +35,14 @@ slv = SLV(
     K2_mask=K2_mask,
 )
 
+# --- Save model parameters ---
+slv.save("example/slv_params.safetensors")
+print("Saved example/slv_params.safetensors")
+
+# --- Load model from saved parameters ---
+slv = SLV.load("example/slv_params.safetensors")
+print(f"Loaded SLV model with {slv.n_species} species")
+
 # --- Generate presence/absence initial conditions ---
 x0 = generate_presence_absence_initial_conditions(
     samples=n_samples,
