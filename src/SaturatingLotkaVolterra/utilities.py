@@ -2,53 +2,91 @@ import numpy as np
 import pandas as pd
 import torch
 
-def generate_presence_absence_initial_conditions(
+def generate_initial_conditions(
     samples,
     num_species,
     target_total_OD=0.02,
+    alpha=1.0,
+    min_community_size=None,
+    max_community_size=None,
     device="cpu",
     dtype=torch.float32,
-    uniform_community_size=True,
-    min_community_size_N=1,
 ):
     """
-    Generate initial conditions with presence/absence patterns for species.
+    Unified initial-condition sampler.
+
+    Each sample is constructed in two stages:
+
+      1. Community size k is drawn uniformly from
+         [min_community_size, max_community_size]; a random subset of k species
+         is marked present. Defaults select k = num_species (full community)
+         for every sample.
+      2. Per-species ratios among the k present species are drawn from
+         Dirichlet(alpha * ones(k)) and scaled so the row sums to
+         target_total_OD. Absent species stay at zero. Passing alpha=None
+         (or float('inf')) uses an equal split (ratios = 1/k).
+
+    Recipes for the common cases:
+      - Full community, Dirichlet ratios (default):
+            alpha=1.0 (uniform on simplex)
+      - Full community, equal OD per species (sanity baseline):
+            alpha=None
+      - Presence/absence subcommunities with equal OD inside each community:
+            alpha=None,
+            min_community_size=1, max_community_size=num_species
 
     Args:
-        samples (int): Number of samples to generate
-        num_species (int): Number of species (N)
-        target_total_OD (float): Target total OD for species (default: 0.02)
-        device (str): PyTorch device (default: "cpu")
-        dtype (torch.dtype): PyTorch data type (default: torch.float32)
-        uniform_community_size (bool): If True, sample community sizes uniformly from [min_size, max_size].
-                                       If False, use 50% probability for each species (default: True)
-        min_community_size_N (int): Minimum number of species present (default: 1)
+        samples (int): Number of samples to generate.
+        num_species (int): Number of species (N).
+        target_total_OD (float): Per-sample total OD (default: 0.02).
+        alpha (float | None): Dirichlet concentration (default: 1.0, uniform
+            on the simplex). None / float('inf') -> equal split across the
+            present species.
+        min_community_size (int | None): Smallest community size, inclusive.
+            Defaults to num_species (always full community).
+        max_community_size (int | None): Largest community size, inclusive.
+            Defaults to num_species.
+        device (str): PyTorch device (default: "cpu").
+        dtype (torch.dtype): PyTorch data type (default: torch.float32).
 
     Returns:
-        torch.Tensor: N0 of shape (samples, num_species) with presence/absence patterns
-            and total OD normalized to target_total_OD.
+        torch.Tensor of shape (samples, num_species). Rows sum to
+        target_total_OD, with zeros for absent species.
     """
-    N0 = torch.zeros((samples, num_species), device=device, dtype=dtype)
+    if min_community_size is None:
+        min_community_size = num_species
+    if max_community_size is None:
+        max_community_size = num_species
+    if not 1 <= min_community_size <= max_community_size <= num_species:
+        raise ValueError(
+            f"require 1 <= min_community_size={min_community_size} <= "
+            f"max_community_size={max_community_size} <= num_species={num_species}"
+        )
 
-    for i in range(samples):
-        if uniform_community_size:
-            community_size_N = torch.randint(
-                min_community_size_N, num_species + 1, (1,), device=device
-            ).item()
-            indices = torch.randperm(num_species, device=device)[:community_size_N]
-            presence_mask_N = torch.zeros(num_species, dtype=torch.bool, device=device)
-            presence_mask_N[indices] = True
-        else:
-            presence_mask_N = torch.rand(num_species, device=device) > 0.5
+    # --- Presence mask (samples, num_species): k ones per row, k drawn per-sample.
+    if min_community_size == num_species:
+        present = torch.ones((samples, num_species), device=device, dtype=dtype)
+    else:
+        k_vec = torch.randint(
+            min_community_size, max_community_size + 1, (samples,), device=device
+        )
+        rand_scores = torch.rand((samples, num_species), device=device)
+        sorted_scores, _ = rand_scores.sort(dim=-1)
+        # k-th smallest score per row -> threshold for selecting k present species
+        thresholds = sorted_scores.gather(1, (k_vec - 1).unsqueeze(-1))
+        present = (rand_scores <= thresholds).to(dtype)
 
-        num_present_N = presence_mask_N.sum().item()
-        if num_present_N > 0:
-            N0[i, presence_mask_N] = target_total_OD / num_present_N
-        else:
-            idx = torch.randint(0, num_species, (1,), device=device)
-            N0[i, idx] = target_total_OD
+    # --- Ratios across present species
+    equal_split = alpha is None or alpha == float("inf")
+    if equal_split:
+        ratios = present / present.sum(dim=-1, keepdim=True)
+    else:
+        alpha_vec = torch.full((num_species,), float(alpha), device=device, dtype=dtype)
+        full = torch.distributions.Dirichlet(alpha_vec).sample((samples,)).to(dtype=dtype)
+        masked = full * present
+        ratios = masked / masked.sum(dim=-1, keepdim=True)
 
-    return N0
+    return ratios * target_total_OD
 
 def create_dataframe(species_names, t_eval, solution, treatment_ids, replicate_ids=None, exp_ids=None):
     """

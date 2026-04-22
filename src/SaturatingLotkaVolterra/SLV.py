@@ -10,7 +10,7 @@ class SLV:
         A_diag_scale: float = 1.0,
         K1_scale: float = 1.0,
         K2_scale: float = 1.0,
-        K2_exist_prob: float = 0.2,
+        K2_exist_prob: float = 1.0,
         interaction_prob: float = 0.8,
         negative_interaction_prob: float = 0.5,
         A_sign: torch.Tensor | None = None,
@@ -25,7 +25,11 @@ class SLV:
         A_diag_scale (float): Scale of the diagonal A parameter
         K1_scale (float): Scale of the K1 parameter
         K2_scale (float): Scale of the K2 parameter
-        K2_exist_prob (float): Probability of K2 existing (ignored if K2_mask is provided)
+        K2_exist_prob (float): Probability of K2 being non-monotone
+            per off-diagonal entry. Default 1.0, i.e. every interaction is
+            non-monotonic for both signs of A. Set < 1.0 to mix monotonic
+            (Holling II) and non-monotonic (Holling IV) responses. Ignored if
+            K2_mask is provided.
         interaction_prob (float): Probability of an off-diagonal interaction existing
         negative_interaction_prob (float): Probability that an off-diagonal interaction
             is negative/inhibitory (ignored if A_sign is provided)
